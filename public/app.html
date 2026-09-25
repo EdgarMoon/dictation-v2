@@ -63,8 +63,19 @@ textarea { line-height: 1.8; resize: vertical; }
     <button type="button" data-ui-lang="fr">Français</button>
   </div></div>
 
+  <!-- PIN -->
+  <section id="screen-pin" class="screen active">
+    <h1 data-i18n="pin_title">🔒 PIN 입력</h1>
+    <p class="subtitle" data-i18n="pin_sub">가족 PIN을 입력하세요.</p>
+    <input type="password" id="pin-input" inputmode="numeric" autocomplete="off" maxlength="12" data-i18n-ph="pin_ph" placeholder="PIN">
+    <div class="row">
+      <button id="btn-unlock" class="btn primary" data-i18n="pin_btn">열기</button>
+    </div>
+    <p class="hint" id="pin-err" style="display:none;color:#c0392b"></p>
+  </section>
+
   <!-- 홈 -->
-  <section id="screen-home" class="screen active">
+  <section id="screen-home" class="screen">
     <h1 data-i18n="home_title">이번 주 받아쓰기</h1>
     <p class="subtitle" data-i18n="home_sub">단어를 넣으면 또렷하게 읽어줘요.<br>아이는 종이에 쓰기만 하면 돼요.</p>
     <div class="row">
@@ -212,7 +223,9 @@ ko: {
   t_load_fail: '목록을 불러오지 못했어요.', t_save_fail: '저장에 실패했어요.', t_del_fail: '삭제에 실패했어요.',
   default_name: function(d){ return '받아쓰기 ' + d; },
   imported_name: function(d){ return '받아온 목록 ' + d; },
-  title: '받아쓰기 연습'
+  title: '받아쓰기 연습',
+  pin_title: '🔒 PIN 입력', pin_sub: '가족 PIN을 입력하세요.', pin_ph: 'PIN', pin_btn: '열기',
+  pin_fail: 'PIN이 틀렸어요. 다시 입력하세요.'
 },
 en: {
   home_link: '🏠 Home',
@@ -256,7 +269,9 @@ en: {
   t_load_fail: "Couldn't load lists.", t_save_fail: 'Save failed.', t_del_fail: 'Delete failed.',
   default_name: function(d){ return 'Dictation ' + d; },
   imported_name: function(d){ return 'Imported List ' + d; },
-  title: 'Dictation Practice'
+  title: 'Dictation Practice',
+  pin_title: '🔒 Enter PIN', pin_sub: 'Enter the family PIN.', pin_ph: 'PIN', pin_btn: 'Unlock',
+  pin_fail: 'Wrong PIN. Try again.'
 },
 fr: {
   home_link: '🏠 Accueil',
@@ -300,7 +315,9 @@ fr: {
   t_load_fail: 'Échec du chargement des listes.', t_save_fail: "Échec de l'enregistrement.", t_del_fail: 'Échec de la suppression.',
   default_name: function(d){ return 'Dictée ' + d; },
   imported_name: function(d){ return 'Liste importée ' + d; },
-  title: 'Pratique de dictée'
+  title: 'Pratique de dictée',
+  pin_title: '🔒 Entrez le PIN', pin_sub: 'Entrez le PIN familial.', pin_ph: 'PIN', pin_btn: 'Ouvrir',
+  pin_fail: 'PIN incorrect. Réessayez.'
 }};
 var UI_LANG_KEY = 'dictation-ui-lang';
 var uiLang = 'ko';
@@ -355,31 +372,70 @@ try{ editorKid = localStorage.getItem(KID_KEY) || 'soyoon'; }catch(e){}
 if(['soyoon','doyoon','siyoon'].indexOf(editorKid) < 0) editorKid = 'soyoon';
 var KID_NAMES = { soyoon: '소윤', doyoon: '도윤', siyoon: '시윤' };
 var listsCache = [];
+/* ---------- PIN ---------- */
+var PIN_KEY = 'dictation-pin';
+function getPin(){ try{ return localStorage.getItem(PIN_KEY) || ''; }catch(e){ return ''; } }
+function apiHeaders(){
+  var h = { 'Content-Type': 'application/json' };
+  var p = getPin();
+  if(p) h['x-app-pin'] = p;
+  return h;
+}
 function apiGet(){
-  return fetch('/api/lists?kid=all').then(function(r){
+  return fetch('/api/lists?kid=all', { headers: apiHeaders() }).then(function(r){
+    if(r.status === 401) throw new Error('pin');
     if(!r.ok) throw new Error('load'); return r.json();
   });
 }
 function apiPost(data){
-  return fetch('/api/lists', { method:'POST', headers:{'Content-Type':'application/json'},
+  return fetch('/api/lists', { method:'POST', headers: apiHeaders(),
     body: JSON.stringify(data) }).then(function(r){
+    if(r.status === 401) throw new Error('pin');
     if(!r.ok) throw new Error('save'); return r.json();
   });
 }
 function apiPut(id, data){
   return fetch('/api/lists/' + encodeURIComponent(id), { method:'PUT',
-    headers:{'Content-Type':'application/json'}, body: JSON.stringify(data) }).then(function(r){
+    headers: apiHeaders(), body: JSON.stringify(data) }).then(function(r){
+    if(r.status === 401) throw new Error('pin');
     if(!r.ok) throw new Error('save'); return r.json();
   });
 }
 function apiDel(id){
-  return fetch('/api/lists/' + encodeURIComponent(id), { method:'DELETE' }).then(function(r){
+  return fetch('/api/lists/' + encodeURIComponent(id), { method:'DELETE', headers: apiHeaders() }).then(function(r){
+    if(r.status === 401) throw new Error('pin');
     if(!r.ok) throw new Error('del'); return r.json();
   });
 }
+async function tryUnlock(pin, silent){
+  var ok = false;
+  try{
+    var r = await fetch('/api/lists?kid=all', { headers: { 'x-app-pin': pin } });
+    ok = r.ok;
+  }catch(e){ ok = false; }
+  if(ok){
+    try{ localStorage.setItem(PIN_KEY, pin); }catch(e2){}
+    $('pin-err').style.display = 'none';
+    $('pin-input').value = '';
+    go('screen-home');
+    refreshLists();
+  }else{
+    try{ localStorage.removeItem(PIN_KEY); }catch(e2){}
+    if(!silent){
+      $('pin-err').textContent = t('pin_fail');
+      $('pin-err').style.display = 'block';
+    }
+    go('screen-pin');
+  }
+  return ok;
+}
 async function refreshLists(){
   try{ listsCache = await apiGet(); }
-  catch(e){ listsCache = []; toast(t('t_load_fail')); }
+  catch(e){
+    listsCache = [];
+    if(e && e.message === 'pin'){ go('screen-pin'); return; }
+    toast(t('t_load_fail'));
+  }
   renderHome();
 }
 function fmtDate(iso){
@@ -745,14 +801,25 @@ function wire(){
     lkBtns[lkb].onclick = (function(b){ return function(){ setListKid(b.getAttribute('data-kid')); }; })(lkBtns[lkb]);
   }
   setListKid(editorKid);
+  $('btn-unlock').onclick = function(){
+    var v = $('pin-input').value.trim();
+    if(v) tryUnlock(v, false);
+  };
+  $('pin-input').addEventListener('keydown', function(e){
+    if(e.key === 'Enter'){
+      var v = $('pin-input').value.trim();
+      if(v) tryUnlock(v, false);
+    }
+  });
   wireOcr();
 }
 
 /* ---------- 시작 ---------- */
 loadUiLang();
-refreshLists();
 wire();
 applyI18n();
+var _savedPin = getPin();
+if(_savedPin) tryUnlock(_savedPin, true); else go('screen-pin');
 try{
   if('speechSynthesis' in window){
     speechSynthesis.getVoices();
