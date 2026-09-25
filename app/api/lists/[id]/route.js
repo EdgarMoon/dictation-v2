@@ -1,10 +1,11 @@
 import { sql } from '@vercel/postgres';
-import { ensureSchema, toClient, toConfig } from '../../../../lib/db';
+import { ensureSchema, toClient, toConfig, checkPin } from '../../../../lib/db';
 
 export const dynamic = 'force-dynamic';
 
 export async function PUT(req, { params }) {
   await ensureSchema();
+  if (!checkPin(req)) return Response.json({ error: 'unauthorized' }, { status: 401 });
   const b = await req.json();
   const title = String(b.title || '').trim();
   if (!title) return Response.json({ error: 'title required' }, { status: 400 });
@@ -23,6 +24,7 @@ export async function PUT(req, { params }) {
 
 export async function DELETE(req, { params }) {
   await ensureSchema();
+  if (!checkPin(req)) return Response.json({ error: 'unauthorized' }, { status: 401 });
   await sql`DELETE FROM lists WHERE id = ${params.id}`;
   return Response.json({ ok: true });
 }
