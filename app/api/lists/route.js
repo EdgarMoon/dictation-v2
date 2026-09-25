@@ -6,7 +6,14 @@ export const dynamic = 'force-dynamic';
 export async function GET(req) {
   await ensureSchema();
   const { searchParams } = new URL(req.url);
-  const kid = validKid(searchParams.get('kid'));
+  const kidParam = searchParams.get('kid');
+  if (kidParam === 'all') {
+    const { rows } = await sql`
+      SELECT id, kid, title, lang, words, config, created_at, updated_at
+      FROM lists ORDER BY updated_at DESC`;
+    return Response.json(rows.map(toClient));
+  }
+  const kid = validKid(kidParam);
   const { rows } = await sql`
     SELECT id, kid, title, lang, words, config, created_at, updated_at
     FROM lists WHERE kid = ${kid} ORDER BY updated_at DESC`;
