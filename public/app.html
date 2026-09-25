@@ -71,12 +71,6 @@ textarea { line-height: 1.8; resize: vertical; }
       <button id="btn-go-editor" class="btn primary" data-i18n="home_make">목록 만들기</button>
       <button id="btn-go-practice" class="btn" data-i18n="home_practice">연습하기</button>
     </div>
-    <label class="lbl" data-i18n="kid_label" style="margin-top:26px">아이</label>
-    <div class="seg" id="kid-seg">
-      <button type="button" data-kid="soyoon" class="on">소윤</button>
-      <button type="button" data-kid="doyoon">도윤</button>
-      <button type="button" data-kid="siyoon">시윤</button>
-    </div>
     <h2 data-i18n="home_saved">저장된 목록</h2>
     <div id="saved-lists"></div>
   </section>
@@ -85,6 +79,12 @@ textarea { line-height: 1.8; resize: vertical; }
   <section id="screen-editor" class="screen">
     <button class="btn ghost" data-go="screen-home" data-i18n="back">← 돌아가기</button>
     <h2 data-i18n="ed_title">단어 목록</h2>
+    <label class="lbl" data-i18n="list_owner">누구 목록?</label>
+    <div class="seg" id="list-kid-seg">
+      <button type="button" data-kid="soyoon" class="on">소윤</button>
+      <button type="button" data-kid="doyoon">도윤</button>
+      <button type="button" data-kid="siyoon">시윤</button>
+    </div>
     <label class="lbl" for="list-name" data-i18n="ed_name">목록 이름</label>
     <input type="text" id="list-name" data-i18n-ph="ed_name_ph" placeholder="예: 9월 4주 받아쓰기">
     <label class="lbl" data-i18n="ed_tts_lang">읽어줄 언어</label>
@@ -208,7 +208,7 @@ ko: {
   ocr_none: '글자를 찾지 못했어요. 다시 찍어보세요.',
   ocr_fail: '인식 실패 (인터넷 연결 확인 후 다시 시도)',
   confirm_del: function(n){ return '「'+n+'」 목록을 삭제할까요?'; },
-  kid_label: '아이', date_created: '만든 날', date_updated: '고친 날',
+  list_owner: '누구 목록?', date_created: '만든 날', date_updated: '고친 날',
   t_load_fail: '목록을 불러오지 못했어요.', t_save_fail: '저장에 실패했어요.', t_del_fail: '삭제에 실패했어요.',
   default_name: function(d){ return '받아쓰기 ' + d; },
   imported_name: function(d){ return '받아온 목록 ' + d; },
@@ -252,7 +252,7 @@ en: {
   ocr_none: "Couldn't find text. Try taking the photo again.",
   ocr_fail: 'Recognition failed (check internet connection and try again)',
   confirm_del: function(n){ return 'Delete the "'+n+'" list?'; },
-  kid_label: 'Kid', date_created: 'Created', date_updated: 'Updated',
+  list_owner: 'Whose list?', date_created: 'Created', date_updated: 'Updated',
   t_load_fail: "Couldn't load lists.", t_save_fail: 'Save failed.', t_del_fail: 'Delete failed.',
   default_name: function(d){ return 'Dictation ' + d; },
   imported_name: function(d){ return 'Imported List ' + d; },
@@ -296,7 +296,7 @@ fr: {
   ocr_none: 'Aucun texte trouvé. Reprenez la photo.',
   ocr_fail: 'Échec (vérifiez la connexion internet et réessayez)',
   confirm_del: function(n){ return 'Supprimer la liste « '+n+' » ?'; },
-  kid_label: 'Enfant', date_created: 'Créé le', date_updated: 'Modifié le',
+  list_owner: 'Pour qui ?', date_created: 'Créé le', date_updated: 'Modifié le',
   t_load_fail: 'Échec du chargement des listes.', t_save_fail: "Échec de l'enregistrement.", t_del_fail: 'Échec de la suppression.',
   default_name: function(d){ return 'Dictée ' + d; },
   imported_name: function(d){ return 'Liste importée ' + d; },
@@ -350,12 +350,13 @@ function toast(msg){
 
 /* ---------- 저장소 (서버 API) ---------- */
 var KID_KEY = 'dictation-kid';
-var kid = 'soyoon';
-try{ kid = localStorage.getItem(KID_KEY) || 'soyoon'; }catch(e){}
-if(['soyoon','doyoon','siyoon'].indexOf(kid) < 0) kid = 'soyoon';
+var editorKid = 'soyoon';
+try{ editorKid = localStorage.getItem(KID_KEY) || 'soyoon'; }catch(e){}
+if(['soyoon','doyoon','siyoon'].indexOf(editorKid) < 0) editorKid = 'soyoon';
+var KID_NAMES = { soyoon: '소윤', doyoon: '도윤', siyoon: '시윤' };
 var listsCache = [];
 function apiGet(){
-  return fetch('/api/lists?kid=' + encodeURIComponent(kid)).then(function(r){
+  return fetch('/api/lists?kid=all').then(function(r){
     if(!r.ok) throw new Error('load'); return r.json();
   });
 }
@@ -461,7 +462,7 @@ function renderHome(){
     var div = document.createElement('div');
     div.className = 'card';
     var suffix = t('count_suffix');
-    var meta1 = (L.lang==='fr'?'Français':'English') + ' · ' + L.words.length + (suffix?suffix:'');
+    var meta1 = (KID_NAMES[L.kid] || L.kid) + ' · ' + (L.lang==='fr'?'Français':'English') + ' · ' + L.words.length + (suffix?suffix:'');
     var meta2 = t('date_created') + ' ' + fmtDate(L.createdAt);
     if(L.updatedAt && L.updatedAt !== L.createdAt)
       meta2 += ' · ' + t('date_updated') + ' ' + fmtDate(L.updatedAt);
@@ -487,6 +488,12 @@ function renderHome(){
 
 /* ---------- 에디터 ---------- */
 var editorLang = 'fr';
+function setListKid(k){
+  editorKid = k;
+  try{ localStorage.setItem(KID_KEY, k); }catch(e){}
+  var btns = $('list-kid-seg').querySelectorAll('button');
+  for(var i=0;i<btns.length;i++) btns[i].classList.toggle('on', btns[i].getAttribute('data-kid')===k);
+}
 function setEditorLang(l){
   editorLang = l;
   var btns = $('lang-seg').querySelectorAll('button');
@@ -500,6 +507,7 @@ function updateCount(){
 function editorConfig(){
   return {
     v: 1,
+    kid: editorKid,
     name: $('list-name').value.trim(),
     lang: editorLang,
     words: parseWords($('words-input').value),
@@ -513,6 +521,7 @@ function editorConfig(){
   };
 }
 function fillEditor(cfg){
+  setListKid(['soyoon','doyoon','siyoon'].indexOf(cfg.kid) >= 0 ? cfg.kid : 'soyoon');
   $('list-name').value = cfg.name || '';
   setEditorLang(cfg.lang === 'en' ? 'en' : 'fr');
   $('words-input').value = (cfg.words || []).join('\n');
@@ -527,7 +536,7 @@ function fillEditor(cfg){
   updateCount();
 }
 function loadIntoEditor(L){
-  fillEditor({ name: L.name, lang: L.lang, words: L.words,
+  fillEditor({ kid: L.kid, name: L.name, lang: L.lang, words: L.words,
     repeats: L.repeats, rate: L.rate, gap: L.gap, order: L.order, mode: L.mode });
   $('btn-save-list').dataset.editId = L.id;
 }
@@ -536,7 +545,7 @@ async function saveCurrentList(){
   if(!cfg.words.length){ toast(t('t_need_words')); return null; }
   if(!cfg.name) cfg.name = t('default_name')(new Date().toLocaleDateString(uiLang==='ko'?'ko-KR':uiLang==='fr'?'fr-FR':'en-US'));
   var editId = $('btn-save-list').dataset.editId;
-  var body = { kid: kid, title: cfg.name, lang: cfg.lang, words: cfg.words,
+  var body = { kid: cfg.kid, title: cfg.name, lang: cfg.lang, words: cfg.words,
     repeats: cfg.repeats, rate: cfg.rate, gap: cfg.gap, order: cfg.order, mode: cfg.mode,
     autonext: cfg.autonext, autonextDelay: cfg.autonextDelay };
   try{
@@ -731,19 +740,11 @@ function wire(){
     var L = await saveCurrentList();
     if(L) startWithList(L);
   };
-  var kidBtns = $('kid-seg').querySelectorAll('button');
-  var paintKid = function(){
-    for(var kb=0;kb<kidBtns.length;kb++)
-      kidBtns[kb].classList.toggle('on', kidBtns[kb].getAttribute('data-kid')===kid);
-  };
-  paintKid();
-  for(var kb2=0;kb2<kidBtns.length;kb2++){
-    kidBtns[kb2].onclick = (function(b){ return function(){
-      kid = b.getAttribute('data-kid');
-      try{ localStorage.setItem(KID_KEY, kid); }catch(e){}
-      paintKid(); refreshLists();
-    }; })(kidBtns[kb2]);
+  var lkBtns = $('list-kid-seg').querySelectorAll('button');
+  for(var lkb=0;lkb<lkBtns.length;lkb++){
+    lkBtns[lkb].onclick = (function(b){ return function(){ setListKid(b.getAttribute('data-kid')); }; })(lkBtns[lkb]);
   }
+  setListKid(editorKid);
   wireOcr();
 }
 
