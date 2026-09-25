@@ -1,10 +1,11 @@
 import { sql } from '@vercel/postgres';
-import { ensureSchema, validKid, toClient, toConfig } from '../../../lib/db';
+import { ensureSchema, validKid, toClient, toConfig, checkPin } from '../../../lib/db';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req) {
   await ensureSchema();
+  if (!checkPin(req)) return Response.json({ error: 'unauthorized' }, { status: 401 });
   const { searchParams } = new URL(req.url);
   const kidParam = searchParams.get('kid');
   if (kidParam === 'all') {
@@ -22,6 +23,7 @@ export async function GET(req) {
 
 export async function POST(req) {
   await ensureSchema();
+  if (!checkPin(req)) return Response.json({ error: 'unauthorized' }, { status: 401 });
   const b = await req.json();
   const kid = validKid(b.kid);
   const title = String(b.title || '').trim();
