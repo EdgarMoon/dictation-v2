@@ -1,0 +1,1 @@
+{"dependencies":{"@vercel/postgres":"0.10.0","next":"14.2.5","react":"^18","react-dom":"^18"},"name":"dictation-v2","private":true,"scripts":{"build":"next build","dev":"next dev","start":"next start"},"version":"1.0.0"}
